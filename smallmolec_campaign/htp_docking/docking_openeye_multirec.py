@@ -21,7 +21,7 @@ import os
 from pathlib import Path
 from rdkit import Chem
 from rdkit.Chem import AllChem
-
+from natsort import natsorted
 '''
 Functions
 '''
@@ -108,7 +108,8 @@ class BaseSettings:
 
         # Check whether the specified path exists or not
         os.makedirs(self.temp_dir, exist_ok=True)
-        self.recep_files = glob.glob(f"{self.recep_file_dir}/*.oedu")
+        os.makedirs(self.score_dir, exist_ok = True)
+        self.recep_files = natsorted(glob.glob(f"{self.recep_file_dir}/*.oedu"))
         self.sample_size = 0#config['sample_size'] 
         
         ### Initialize mpi
@@ -281,12 +282,14 @@ class OpeneyeFuncs():
         protein_universe = mda.Universe(protein_pdb)
         return protein_universe
     
+    @staticmethod
     def create_complex(protein_universe, ligand_pdb):
         u1 = protein_universe
         u2 = mda.Universe(ligand_pdb)
         u = mda.core.universe.Merge(u1.select_atoms("all"), u2.atoms)#, u3.atoms)
         return u
-    
+
+    @staticmethod
     def create_trajectory(protein_universe, ligand_dir, output_pdb_name, output_dcd_name):
         import MDAnalysis as mda
         ligand_files = sorted(os.listdir(ligand_dir))
@@ -309,11 +312,11 @@ class RunDocking(BaseSettings, OpeneyeFuncs):
         self.smi_df_rank =  np.array_split(self.smi_df, self.size)[self.rank] 
         self.receptor_inps = [self.read_receptor(rec) for rec in self.recep_files]
         self.dock_objs = [self.init_rec(rec_inp) for rec_inp in self.receptor_inps]
-        self.score_dict = {rec: [] for rec in self.recep_files}
+        self.score_dict = {os.path.splitext(os.path.basename(rec))[0]: [] for rec in self.recep_files}
         self.score_dict['smiles'] = []
         if self.pose_gen == True:
             for rec_file, rec_inp in zip(self.recep_files, self.receptor_inps):
-                out_rec_path = f'{temp_dir}/{Path(rec_file).stem}.pdb'
+                out_rec_path = f'{self.temp_dir}/{Path(rec_file).stem}.pdb'
                 if not os.path.isfile(out_rec_path):
                     self.write_receptor(rec_inp, out_rec_path)
     
@@ -373,16 +376,19 @@ class RunDocking(BaseSettings, OpeneyeFuncs):
                 self.smi_to_structure(smiles, Path(fd.name))
                 conformers = self.from_structure(Path(fd.name))
         self.score_dict['smiles'].append(smiles)
-        for recit, (recf, dock_obj) in enumerate(zip(self.receptor_files, self.dock_objs)):
+        for recit, (recf, dock_obj) in enumerate(zip(self.recep_files, self.dock_objs)):
+            recf_base = os.path.splitext(os.path.basename(recf))[0]
             score = self.dock_smile_rec(
                        smiles,
                        conformers,
                        recf,
                        dock_obj,
                        lig_identify = lig_identify)
-            self.score_dict[recf].append(score)
+            print(score)
+            self.score_dict[recf_base].append(score)
     
-    def run_mpi_docking_list(self):
+    def run_mpi_docking_list(self,
+                             lig_identify = None):
         
         smiles_list = self.smi_df_rank['smiles']
         smiles_index = [ind for ind in range(len(smiles_list))]
@@ -397,8 +403,8 @@ class RunDocking(BaseSettings, OpeneyeFuncs):
                     lig_identify,
                     )
             df_score = pd.DataFrame(self.score_dict)
-            df_score.to_csv(f'{self.score_pattern_base}.{batch_it}.csv')
-            self.score_dict = {rec: [] for rec in self.recep_files}
+            df_score.to_csv(f'{self.score_dir}/{self.score_pattern_base}.{self.rank}.{batch_it}.csv')
+            self.score_dict = {os.path.splitext(os.path.basename(rec))[0]: [] for rec in self.recep_files}
             self.score_dict['smiles'] = []
         return 1
 
