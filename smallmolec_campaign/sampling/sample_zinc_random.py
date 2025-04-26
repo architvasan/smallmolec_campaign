@@ -1,3 +1,4 @@
+from tqdm import tqdm
 import glob
 import numpy as np
 import pandas as pd
@@ -61,12 +62,12 @@ def sample_zinc_random(
     Data_smiles_total = []
     continue_search = 0
 
-    for fil_it, fil in enumerate(my_files):
-        with gzip.open(fil,'rb') as f:
+    for fil_it, fil in tqdm(enumerate(my_files)):
+        with gzip.open(fil,'rt') as f:
                 for line in f:
                     Data_smiles_total.append(line.split()[0])
-
-        if len(Data_smiles_total)<100000 and fil_it<len(split_files):
+                    #print(Data_smiles_total)
+        if len(Data_smiles_total)<100000 and fil_it<len(my_files):
             continue_search=1
             continue
         if continue_search == 0:
