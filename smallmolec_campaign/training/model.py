@@ -1,28 +1,14 @@
-import os, sys
 import pandas as pd
-import scipy as sp
 import numpy as np
 from tqdm import tqdm
-import nltk
-from nltk.corpus import movie_reviews
-import sklearn
-from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.metrics import f1_score, classification_report
 import torch
 from torch.utils.data import Dataset, DataLoader, dataset
 import torch.utils.data as data_utils
-import matplotlib.pyplot as plt
 import math
 import os
-from tempfile import TemporaryDirectory
-from typing import Tuple
 from torch import nn, Tensor
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
-from SmilesPE.tokenizer import *
-from smiles_pair_encoders_functions import *
+from torch.nn import functional as F
 from itertools import chain, repeat, islice
-from torch.utils.data import DataLoader, TensorDataset
 from pathlib import Path
 import warnings
 from torcheval.metrics.functional import multiclass_f1_score
@@ -49,7 +35,7 @@ class PositionalEmbedding(torch.nn.Module):
         # self.register_buffer('pe', pe)
 
     def forward(self, x):
-        return self.pe
+        return self.pe.to('cuda')
 
 
 class BERTEmbedding(torch.nn.Module):
@@ -72,13 +58,13 @@ class BERTEmbedding(torch.nn.Module):
         self.embed_size = embed_size
         # (m, seq_len) --> (m, seq_len, embed_size)
         # padding_idx is not updated during training, remains as fixed pad (0)
-        self.token = torch.nn.Embedding(vocab_size, embed_size, padding_idx=0)
-        self.segment = torch.nn.Embedding(3, embed_size, padding_idx=0)
-        self.position = PositionalEmbedding(d_model=embed_size, max_len=seq_len)
-        self.dropout = torch.nn.Dropout(p=dropout)
+        self.token = torch.nn.Embedding(vocab_size, embed_size, padding_idx=0).to('cuda')
+        self.segment = torch.nn.Embedding(3, embed_size, padding_idx=0).to('cuda')
+        self.position = PositionalEmbedding(d_model=embed_size, max_len=seq_len).to('cuda')
+        self.dropout = torch.nn.Dropout(p=dropout).to('cuda')
 
-    def forward(self, sequence, segment_label):
-        x = self.token(sequence) + self.position(sequence) + self.segment(segment_label)
+    def forward(self, sequence):
+        x = self.token(sequence) + self.position(sequence)
         return self.dropout(x)
 
 ### attention layers
@@ -168,6 +154,8 @@ class EncoderLayer(torch.nn.Module):
         # embeddings: (batch_size, max_len, d_model)
         # encoder mask: (batch_size, 1, 1, max_len)
         # result: (batch_size, max_len, d_model)
+        #print(embeddings.shape)
+        #print(mask.shape)
         interacted = self.dropout(self.self_multihead(embeddings, embeddings, embeddings, mask))
         # residual layer
         interacted = self.layernorm(interacted + embeddings)
@@ -205,35 +193,18 @@ class BERT(torch.nn.Module):
         self.encoder_blocks = torch.nn.ModuleList(
             [EncoderLayer(d_model, heads, d_model * 4, dropout) for _ in range(n_layers)])
 
-    def forward(self, x, segment_info):
+    def forward(self, x, mask):
         # attention masking for padded token
         # (batch_size, 1, seq_len, seq_len)
-        mask = (x > 0).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
+        #mask = (x > 0).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
 
         # embedding the indexed sequence to sequence of vectors
-        x = self.embedding(x, segment_info)
+        x = self.embedding(x)
 
         # running over multiple transformer blocks
         for encoder in self.encoder_blocks:
             x = encoder.forward(x, mask)
         return x
-
-class NextSentencePrediction(torch.nn.Module):
-    """
-    2-class classification model : is_next, is_not_next
-    """
-
-    def __init__(self, hidden):
-        """
-        :param hidden: BERT model output size
-        """
-        super().__init__()
-        self.linear = torch.nn.Linear(hidden, 2)
-        self.softmax = torch.nn.LogSoftmax(dim=-1)
-
-    def forward(self, x):
-        # use only the first token which is the [CLS]
-        return self.softmax(self.linear(x[:, 0]))
 
 class MaskedLanguageModel(torch.nn.Module):
     """
@@ -267,12 +238,13 @@ class BERTLM(torch.nn.Module):
         """
 
         super().__init__()
-        self.bert = bert
-        self.next_sentence = NextSentencePrediction(self.bert.d_model)
-        self.mask_lm = MaskedLanguageModel(self.bert.d_model, vocab_size)
+        self.bert = bert.to('cuda')
+        self.mask_lm = MaskedLanguageModel(self.bert.d_model, vocab_size).to('cuda')
 
-    def forward(self, x, segment_label):
-        x = self.bert(x, segment_label)
-        return self.next_sentence(x), self.mask_lm(x)
+    def forward(self, x, mask):
+        #print(x)
+        #print(mask)
+        x = self.bert(x, mask)
+        return self.mask_lm(x)
 
 

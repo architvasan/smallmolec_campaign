@@ -1,21 +1,33 @@
 import smallmolec_campaign.training.optimizer as optimizer
-
+from tqdm import tqdm
+from torch.optim import Adam
+import torch
+import wandb
+import os
 class BERTTrainer:
     def __init__(
         self, 
         model, 
         train_dataloader, 
         test_dataloader=None, 
-        lr= 1e-4,
+        lr= 1e-6,
         weight_decay=0.01,
         betas=(0.9, 0.999),
         warmup_steps=10000,
         log_freq=10,
-        device='cuda'
+        device='cuda',
+        project_name='bert_smiles',
+        run_name='bert_smiles',
+        run_id=None,
+        run_dir=None,
+        run_notes=None, 
         ):
 
         self.device = device
-        self.model = model
+        #print(self.device)
+        self.model = model.to(device)
+        #print(self.model)
+        #self.model.to('cpu')
         self.train_data = train_dataloader
         self.test_data = test_dataloader
 
@@ -38,63 +50,47 @@ class BERTTrainer:
 
     def iteration(self, epoch, data_loader, train=True):
         
-        avg_loss = 0.0
-        total_correct = 0
-        total_element = 0
-        
         mode = "train" if train else "test"
 
-        # progress bar
-        data_iter = tqdm.tqdm(
-            enumerate(data_loader),
-            desc="EP_%s:%d" % (mode, epoch),
-            total=len(data_loader),
-            bar_format="{l_bar}{r_bar}"
-        )
-
-        for i, data in data_iter:
-
-            # 0. batch_data will be sent into the device(GPU or cpu)
-            data = {key: value.to(self.device) for key, value in data.items()}
-
+        avg_loss = 0
+        for i, batch in tqdm(enumerate(data_loader)):
+            #[key.to(self.device) for key in batch]
+            input_ids, attention_mask, labels = batch
+            input_ids = input_ids.to(self.device)
+            attention_mask = attention_mask.to(self.device)
+            labels = labels.to(self.device)
+            attention_mask = attention_mask.unsqueeze(1).unsqueeze(2).to(self.device)
             # 1. forward the next_sentence_prediction and masked_lm model
-            next_sent_output, mask_lm_output = self.model.forward(data["bert_input"], data["segment_label"])
-
-            # 2-1. NLL(negative log likelihood) loss of is_next classification result
-            next_loss = self.criterion(next_sent_output, data["is_next"])
-
-            # 2-2. NLLLoss of predicting masked token word
+            mask_lm_output = self.model.forward(input_ids, attention_mask)
+            #continue
+            #import sys
+            #sys.exit()
             # transpose to (m, vocab_size, seq_len) vs (m, seq_len)
             # criterion(mask_lm_output.view(-1, mask_lm_output.size(-1)), data["bert_label"].view(-1))
-            mask_loss = self.criterion(mask_lm_output.transpose(1, 2), data["bert_label"])
-
-            # 2-3. Adding next_loss and mask_loss : 3.4 Pre-training Procedure
-            loss = next_loss + mask_loss
-
+            mask_loss = self.criterion(mask_lm_output.transpose(1, 2), labels)
+            #print(mask_loss)
             # 3. backward and optimization only in train
             if train:
                 self.optim_schedule.zero_grad()
-                loss.backward()
+                mask_loss.backward()
                 self.optim_schedule.step_and_update_lr()
-
             # next sentence prediction accuracy
-            correct = next_sent_output.argmax(dim=-1).eq(data["is_next"]).sum().item()
-            avg_loss += loss.item()
-            total_correct += correct
-            total_element += data["is_next"].nelement()
+            avg_loss += mask_loss.item()
+            print(f"{mask_loss=}")
+            wandb.log({
+                    f"{mode}loss": avg_loss/ (i + 1),
+                    "step": i
+                })
+
 
             post_fix = {
                 "epoch": epoch,
                 "iter": i,
                 "avg_loss": avg_loss / (i + 1),
-                "avg_acc": total_correct / total_element * 100,
-                "loss": loss.item()
+                "loss": mask_loss.item()
             }
-
-            if i % self.log_freq == 0:
-                data_iter.write(str(post_fix))
+            print(post_fix)
+        print(len(data_loader))
         print(
             f"EP{epoch}, {mode}: \
-            avg_loss={avg_loss / len(data_iter)}, \
-            total_acc={total_correct * 100.0 / total_element}"
-        ) 
+            avg_loss={avg_loss / len(data_loader)}") 

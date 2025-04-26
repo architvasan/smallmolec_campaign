@@ -1,14 +1,15 @@
 import torch
 from torch.utils.data import Dataset, DataLoader, dataset
 import torch.utils.data as data_utils
-import matplotlib.pyplot as plt
 import math
 import os
 from tempfile import TemporaryDirectory
 from typing import Tuple
 from torch import nn, Tensor
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
-
+from torch.optim import Adam
+import numpy as np
+print("Hello")
 class ScheduledOptim():
     '''A simple wrapper class for learning rate scheduling'''
 
