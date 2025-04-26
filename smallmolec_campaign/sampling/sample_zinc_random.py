@@ -48,13 +48,13 @@ def sample_zinc_random(
     np.random.seed(seed)
     random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
-    zinc_files = glob.glob(zinc_data_path + '/*.gz')
-    split_files = split_files(zinc_data_path, num_splits=size)
+    #zinc_files = glob.glob(zinc_data_path + '/*.gz')
+    files_mpi = split_files(zinc_data_path, num_splits=size)
     # Get the files for this process
     if use_mpi:
-        my_files = split_files[rank]
+        my_files = files_mpi[rank]
     else:
-        my_files = split_files[0]
+        my_files = files_mpi[0]
     # Sample random SMILES from the files
     # Initialize an empty list to store sampled SMILES
     sampled_smiles = []
