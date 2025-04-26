@@ -103,8 +103,8 @@ class BaseSettings:
         self.pose_gen = config['pose_gen'] # Boolean... should we gen poses?
         self.batch_size = config['batch_size']
         self.score_cutoff = config['score_cutoff'] # below this score generate pose
-        self.temp_storage = config['temp_storage']
-        self.temp_dir = config['lig_dir']#'lig_confs' # store ligand poses temporarily
+        self.temp_dir = config['temp_storage']
+        self.out_poses_gen = config['out_poses']#'lig_confs' # store ligand poses temporarily
 
         # Check whether the specified path exists or not
         os.makedirs(self.temp_dir, exist_ok=True)
@@ -327,7 +327,8 @@ class RunDocking(BaseSettings, OpeneyeFuncs):
                        conformers,
                        recf,
                        dock_obj,
-                       lig_identify = None):
+                       lig_identify = None,
+                       output_poses = None):
         """Run OpenEye docking on a single ligand, receptor pair.
         Parameters
         ----------
@@ -343,16 +344,16 @@ class RunDocking(BaseSettings, OpeneyeFuncs):
         if self.pose_gen:
             if best_score[0]<self.score_cutoff:
                 sys.stdout.flush()
-                if not os.path.isdir(f'{self.temp_dir}/{lig_identify}'):
-                    os.mkdir(f'{self.temp_dir}/{lig_identify}')
-                self.write_ligand(lig, self.temp_dir, smiles, lig_identify)
+                if not os.path.isdir(f'{self.out_poses_gen}/{lig_identify}'):
+                    os.mkdir(f'{self.out_poses_gen}/{lig_identify}', exist_ok = True)
+                self.write_ligand(lig, f'{self.out_poses_gen}', smiles, lig_identify)
                 protein_universe = self.create_proteinuniv(self.protein_pdb)
                 
-                os.makedirs(f'{self.temp_dir}/{lig_identify}/pdbs')
-                os.makedirs(f'{self.temp_dir}/{lig_identify}/dcds')
-                self.create_trajectory(protein_universe, f'{self.temp_dir}/{lig_identify}',
-                                        f'{self.temp_dir}/{lig_identify}/pdbs/{Path(recf).stem}.{lig_identify}.pdb',
-                                        f'{self.temp_dir}/{lig_identify}/dcds/{Path(recf).stem}.{lig_identify}.dcd')
+                os.makedirs(f'{self.out_poses_gen}/{lig_identify}/pdbs')
+                os.makedirs(f'{self.out_poses_gen}/{lig_identify}/dcds')
+                self.create_trajectory(protein_universe, f'{self.out_poses_gen}/{lig_identify}',
+                                        f'{self.out_poses_gen}/{lig_identify}/pdbs/{Path(recf).stem}.{lig_identify}.pdb',
+                                        f'{self.out_poses_gen}/{lig_identify}/dcds/{Path(recf).stem}.{lig_identify}.dcd')
 
         return best_score
 
