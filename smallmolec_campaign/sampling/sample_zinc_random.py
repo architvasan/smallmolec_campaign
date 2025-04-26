@@ -62,7 +62,7 @@ def sample_zinc_random(
     continue_search = 0
 
     for fil_it, fil in enumerate(my_files):
-        with gzip.open(fil,'rt') as f:
+        with gzip.open(fil,'rb') as f:
                 for line in f:
                     Data_smiles_total.append(line.split()[0])
 
