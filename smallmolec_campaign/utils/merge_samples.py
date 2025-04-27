@@ -1,3 +1,4 @@
+from tqdm import tqdm
 import pandas as pd
 import os
 import glob
@@ -11,14 +12,14 @@ def merge_samples(input_dir, output_file):
         output_file (str): Path to the output merged CSV file.
     """
     # Get all CSV files in the input directory
-    csv_files = glob.glob(os.path.join(input_dir, '*.csv'))
+    csv_files = glob.glob(os.path.join(input_dir, '*.txt'))
 
     # Initialize an empty list to store DataFrames
     dataframes = []
 
     # Read each CSV file and append it to the list
-    for file in csv_files:
-        df = pd.read_csv(file)
+    for file in tqdm(csv_files):
+        df = pd.read_csv(file, names=['smiles'], engine="pyarrow")
         dataframes.append(df)
 
     # Concatenate all DataFrames into a single DataFrame
