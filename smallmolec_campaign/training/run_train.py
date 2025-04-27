@@ -2,9 +2,11 @@
 import pandas as pd
 from smallmolec_campaign.training import smiles_dataloader, trainer, model
 import wandb
+import torch
 def run_train(
         data_train,
         data_val,
+        output_model='model_state_dict.pth',
         vocab_file='../../VocabFiles/vocab_spe.txt',
         spe_file = '../../VocabFiles/SPE_ChEMBL.txt',
         max_len=64,
@@ -55,7 +57,7 @@ def run_train(
             loss_ep_train = bert_trainer.train(epoch)
             loss_ep_test = bert_trainer.test(epoch)
             if loss_ep_test < best_loss_test:
-                torch.save(bert_lm.state_dict(), 'model_state_dict.pth')
+                torch.save(bert_lm.state_dict(), output_model)
  
 if __name__ == '__main__':
         import argparse
@@ -75,6 +77,7 @@ if __name__ == '__main__':
         parser.add_argument('--heads', type=int, default=32, help='Number of attention heads.')
         parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate.')
         parser.add_argument('--device', type=str, default='cuda', help='Device to use for training (e.g., "cuda" or "cpu").')
+        parser.add_argument('--output_model', type=str, default='model_state_dict.pth', help='Path to save the trained model.')
         args = parser.parse_args()
         # Call the run_train function with the provided arguments
         run_train(
@@ -91,4 +94,5 @@ if __name__ == '__main__':
                 heads=args.heads,
                 dropout=args.dropout,
                 device=args.device,
+                output_model=args.output_model
                 )
