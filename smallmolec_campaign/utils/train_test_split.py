@@ -34,8 +34,8 @@ def train_test_split(input_df, output_dir, test_size=0.2):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Split dataset into train and test sets.")
-    parser.add_argument("input_df", type=str, help="Path to the input CSV file.")
-    parser.add_argument("output_dir", type=str, help="Directory to save the split files.")
+    parser.add_argument("--input_df", type=str, help="Path to the input CSV file.")
+    parser.add_argument("--output_dir", type=str, help="Directory to save the split files.")
     parser.add_argument("--test_size", type=float, default=0.2, help="Proportion of the dataset to include in the test split.")
     args = parser.parse_args()
     train_test_split(args.input_df, args.output_dir, args.test_size)
