@@ -48,11 +48,15 @@ def run_train(
         bert_lm = model.BERTLM(bert_model, len(tokenizer.vocab))
         bert_trainer = trainer.BERTTrainer(bert_lm, train_dataloader, val_dataloader, device='cuda')
         epochs = 20
-
+        losses_train = []
+        losses_test = []
+        best_loss_test = 100
         for epoch in range(epochs):
-          bert_trainer.train(epoch)
-          bert_trainer.test(epoch)
-
+            loss_ep_train = bert_trainer.train(epoch)
+            loss_ep_test = bert_trainer.test(epoch)
+            if loss_ep_test < best_loss_test:
+                torch.save(bert_lm.state_dict(), 'model_state_dict.pth')
+ 
 if __name__ == '__main__':
         import argparse
 

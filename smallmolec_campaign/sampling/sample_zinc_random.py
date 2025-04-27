@@ -19,7 +19,7 @@ def initialize_mpi():
 
 def split_files(zinc_data_path, num_splits=10):
     # Get all the files in the directory
-    all_files = glob.glob(zinc_data_path + '/*.gz')
+    all_files = sorted(glob.glob(zinc_data_path + '/*.gz'))
     
     # Split the files into chunks
     split_files = [all_files[i::num_splits] for i in range(num_splits)]
@@ -41,7 +41,7 @@ def sample_zinc_random(
         size = 1
     # Create output directory if it doesn't exist
     if not os.path.exists(output_path):
-        os.makedirs(output_path)
+        os.makedirs(output_path, exist_ok=True)
 
     # Split the files into chunks for each MPI process
     # Set random seed for reproducibility   
@@ -62,17 +62,25 @@ def sample_zinc_random(
     Data_smiles_total = []
     continue_search = 0
 
-    for fil_it, fil in tqdm(enumerate(my_files)):
+    for fil_it, fil in tqdm(enumerate(my_files[:])):
         with gzip.open(fil,'rt') as f:
                 for line in f:
                     Data_smiles_total.append(line.split()[0])
-                    #print(Data_smiles_total)
         if len(Data_smiles_total)<100000 and fil_it<len(my_files):
             continue_search=1
             continue
+        else:
+            continue_search=0
         if continue_search == 0:
-                sampled_smiles.append(random.sample(Data_smiles_total, 100))
+                sampled_smiles.extend(random.sample(Data_smiles_total, num_samples))
                 Data_smiles_total = []
+
+    # Save the sampled SMILES to a file
+    output_file = os.path.join(output_path, f'sampled_smiles_{rank}.txt')
+    with open(output_file, 'w') as f:
+        for smiles in sampled_smiles:
+            f.write(smiles + '\n')
+    print(f'Sampled SMILES saved to {output_file}')
     return sampled_smiles
 
 if __name__ == '__main__':
@@ -93,10 +101,4 @@ if __name__ == '__main__':
         seed=args.seed,
         use_mpi=args.use_mpi
     )
-    # Save the sampled SMILES to a file
-    output_file = os.path.join(args.output_path, 'sampled_smiles.txt')
-    with open(output_file, 'w') as f:
-        for smiles in sampled_smiles:
-            f.write(smiles + '\n')
-    print(f'Sampled SMILES saved to {output_file}')
-    print(f'Sampled {len(sampled_smiles)} SMILES from {args.zinc_data_path}')
+    

@@ -43,10 +43,11 @@ class BERTTrainer:
         print("Total Parameters:", sum([p.nelement() for p in self.model.parameters()]))
     
     def train(self, epoch):
-        self.iteration(epoch, self.train_data)
-
+        loss_ep_train = self.iteration(epoch, self.train_data)
+        return loss_ep_train
     def test(self, epoch):
-        self.iteration(epoch, self.test_data, train=False)
+        loss_ep_test = self.iteration(epoch, self.test_data, train=False)
+        return loss_ep_test
 
     def iteration(self, epoch, data_loader, train=True):
         
@@ -89,8 +90,7 @@ class BERTTrainer:
                 "avg_loss": avg_loss / (i + 1),
                 "loss": mask_loss.item()
             }
-            print(post_fix)
-        print(len(data_loader))
         print(
             f"EP{epoch}, {mode}: \
             avg_loss={avg_loss / len(data_loader)}") 
+        return avg_loss/len(data_loader)
