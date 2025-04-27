@@ -30,3 +30,14 @@ def train_test_split(input_df, output_dir, test_size=0.2):
     train_df.to_csv(os.path.join(output_dir, "train.csv"), index=False)
     test_df.to_csv(os.path.join(output_dir, "test.csv"), index=False)
     return train_df, test_df
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description="Split dataset into train and test sets.")
+    parser.add_argument("input_df", type=str, help="Path to the input CSV file.")
+    parser.add_argument("output_dir", type=str, help="Directory to save the split files.")
+    parser.add_argument("--test_size", type=float, default=0.2, help="Proportion of the dataset to include in the test split.")
+    args = parser.parse_args()
+    train_test_split(args.input_df, args.output_dir, args.test_size)
+    # Example usage
+    # train_test_split("data.csv", "output", test_size=0.2)
