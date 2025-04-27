@@ -14,7 +14,7 @@ def train_test_split(input_df, output_dir, test_size=0.2):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    df = pd.read_csv(input_df)
+    df = pd.read_csv(input_df, engine='pyarrow')
 
     # Shuffle the DataFrame
     df = df.sample(frac=1, random_state=42).reset_index(drop=True)
