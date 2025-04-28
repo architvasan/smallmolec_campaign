@@ -14,7 +14,7 @@ def run_train(
         mask_prob=0.15,
         epochs=20,
         d_model=256,
-        n_layers=21,
+        n_layers=16,
         heads=32,
         dropout=0.1,
         device='cuda',
@@ -33,7 +33,7 @@ def run_train(
                                                mask_prob=mask_prob).get_dataloader()
 
         val_dataloader = smiles_dataloader.MLMDataloader(
-                                               texts=input_data_train,
+                                               texts=input_data_val,
                                                tokenizer=tokenizer, 
                                                batch_size=batch_size,
                                                max_length=max_len,
