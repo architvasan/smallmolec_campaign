@@ -1,9 +1,120 @@
-'''test run'''
 import pandas as pd
-from smallmolec_campaign.training import smiles_dataloader, trainer, model
+from smallmolec_campaign.training import dataloader, trainer, model
 import wandb
 import torch
-def run_train(
+from smallmolec_campaign.utils.data_utils import *
+from dataclasses import dataclass
+
+@dataclass
+class Run:
+    data_train: str
+    data_val: str
+    output_model: str = 'model_state_dict.pth'
+    vocab_file: str = '../../VocabFiles/vocab_spe.txt'
+    spe_file: str = '../../VocabFiles/SPE_ChEMBL.txt'
+    max_len: int = 64
+    batch_size: int = 256
+    mask_prob: float = 0.15
+    epochs: int = 20
+    d_model: int = 256
+    n_layers: int = 16
+    heads: int = 32
+    dropout: float = 0.1
+    device: str = 'cuda'
+    project_name: str = 'sst runs'
+    run_name: str = 'run_1'
+
+    def __post_init__(self):
+        wandb.init(project=self.project_name, name=self.run_name)
+        tokenizer = smilespetok(vocab_file=self.vocab_file, spe_file=self.spe_file)
+        input_data_train = list(pd.read_csv(self.data_train)['smiles'])
+        input_data_val = list(pd.read_csv(self.data_val)['smiles'])
+
+        self.train_dataloader = dataloader.MLMDataloader(
+                                               texts=input_data_train,
+                                               tokenizer=tokenizer, 
+                                               batch_size=self.batch_size,
+                                               max_length=self.max_len,
+                                               mask_prob=self.mask_prob).get_dataloader()
+
+        self.val_dataloader = dataloader.MLMDataloader(
+                                               texts=input_data_val,
+                                               tokenizer=tokenizer, 
+                                               batch_size=self.batch_size,
+                                               max_length=self.max_len,
+                                               mask_prob=self.mask_prob).get_dataloader()
+
+        self.bert_model = model.BERT(
+                       vocab_size=len(tokenizer.vocab),
+                       d_model=self.d_model,
+                       n_layers=self.n_layers,
+                       heads=self.heads,
+                       dropout=self.dropout
+                       )
+
+        self.bert_lm = model.BERTLM(bert_model, len(tokenizer.vocab))
+
+    def run_train(
+            self):
+        bert_trainer = trainer.BERTTrainer(self.bert_lm, self.train_dataloader, self.val_dataloader, device=self.device)
+        losses_train = []
+        losses_test = []
+        best_loss_test = 100
+        for epoch in range(self.epochs):
+            loss_ep_train = bert_trainer.train(epoch)
+            loss_ep_test = bert_trainer.test(epoch)
+            losses_train.append(loss_ep_train)
+            losses_test.append(loss_ep_test)
+            if loss_ep_test < best_loss_test:
+                torch.save(self.bert_lm.state_dict(), self.output_model)
+        return losses_train, losses_test
+ 
+if __name__ == '__main__':
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Train a BERT model for SMILES data.')
+    
+    parser.add_argument('--data_train', type=str, required=True, help='Path to the training data CSV file.')
+    parser.add_argument('--data_val', type=str, required=True, help='Path to the validation data CSV file.')
+    parser.add_argument('--vocab_file', type=str, default='../../VocabFiles/vocab_spe.txt', help='Path to the vocabulary file.')
+    parser.add_argument('--spe_file', type=str, default='../../VocabFiles/SPE_ChEMBL.txt', help='Path to the SPE file.')
+    parser.add_argument('--max_len', type=int, default=64, help='Maximum length of the sequences.')
+    parser.add_argument('--batch_size', type=int, default=256, help='Batch size for training.')
+    parser.add_argument('--mask_prob', type=float, default=0.15, help='Probability of masking tokens.')
+    parser.add_argument('--epochs', type=int, default=20, help='Number of training epochs.')
+    parser.add_argument('--d_model', type=int, default=256, help='Dimension of the model.')
+    parser.add_argument('--n_layers', type=int, default=21, help='Number of layers in the model.')
+    parser.add_argument('--heads', type=int, default=32, help='Number of attention heads.')
+    parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate.')
+    parser.add_argument('--device', type=str, default='cuda', help='Device to use for training (e.g., "cuda" or "cpu").')
+    parser.add_argument('--output_model', type=str, default='model_state_dict.pth', help='Path to save the trained model.')
+    parser.add_argument('--project_name', type=str, default = 'sst runs', help = 'project name in wandb')
+    parser.add_argument('--run_name', type=str, default='run_1', help='run name in wandb')
+    
+    args = parser.parse_args()
+    # Call the run_train function with the provided arguments
+    runner = Run(
+            data_train=args.data_train,
+            data_val=args.data_val,
+            vocab_file=args.vocab_file,
+            spe_file = args.spe_file,
+            max_len=args.max_len,
+            batch_size=args.batch_size,
+            mask_prob=args.mask_prob,
+            epochs=args.epochs,
+            d_model=args.d_model,
+            n_layers=args.n_layers,
+            heads=args.heads,
+            dropout=args.dropout,
+            device=args.device,
+            output_model=args.output_model,
+            project_name=args.project_name,
+            run_name=args.run_name
+            )
+    runner.run_train()   
+
+if False:
+    def run_train(
         data_train,
         data_val,
         output_model='model_state_dict.pth',
@@ -21,18 +132,18 @@ def run_train(
         ):
         wandb.init(project='sst runs', name='bert_smiles')
         # Initialize and train the model
-        tokenizer = smiles_dataloader.smilespetok(vocab_file=vocab_file, spe_file=spe_file)
+        tokenizer = smilespetok(vocab_file=vocab_file, spe_file=spe_file)
         input_data_train = list(pd.read_csv(data_train)['smiles'])
         input_data_val = list(pd.read_csv(data_val)['smiles'])
         # Create dataloaders for training and validation 
-        train_dataloader = smiles_dataloader.MLMDataloader(
+        train_dataloader = dataloader.MLMDataloader(
                                                texts=input_data_train,
                                                tokenizer=tokenizer, 
                                                batch_size=batch_size,
                                                max_length=max_len,
                                                mask_prob=mask_prob).get_dataloader()
 
-        val_dataloader = smiles_dataloader.MLMDataloader(
+        val_dataloader = dataloader.MLMDataloader(
                                                texts=input_data_val,
                                                tokenizer=tokenizer, 
                                                batch_size=batch_size,
@@ -58,41 +169,4 @@ def run_train(
             loss_ep_test = bert_trainer.test(epoch)
             if loss_ep_test < best_loss_test:
                 torch.save(bert_lm.state_dict(), output_model)
- 
-if __name__ == '__main__':
-        import argparse
 
-        parser = argparse.ArgumentParser(description='Train a BERT model for SMILES data.')
-
-        parser.add_argument('--data_train', type=str, required=True, help='Path to the training data CSV file.')
-        parser.add_argument('--data_val', type=str, required=True, help='Path to the validation data CSV file.')
-        parser.add_argument('--vocab_file', type=str, default='../../VocabFiles/vocab_spe.txt', help='Path to the vocabulary file.')
-        parser.add_argument('--spe_file', type=str, default='../../VocabFiles/SPE_ChEMBL.txt', help='Path to the SPE file.')
-        parser.add_argument('--max_len', type=int, default=64, help='Maximum length of the sequences.')
-        parser.add_argument('--batch_size', type=int, default=256, help='Batch size for training.')
-        parser.add_argument('--mask_prob', type=float, default=0.15, help='Probability of masking tokens.')
-        parser.add_argument('--epochs', type=int, default=20, help='Number of training epochs.')
-        parser.add_argument('--d_model', type=int, default=256, help='Dimension of the model.')
-        parser.add_argument('--n_layers', type=int, default=21, help='Number of layers in the model.')
-        parser.add_argument('--heads', type=int, default=32, help='Number of attention heads.')
-        parser.add_argument('--dropout', type=float, default=0.1, help='Dropout rate.')
-        parser.add_argument('--device', type=str, default='cuda', help='Device to use for training (e.g., "cuda" or "cpu").')
-        parser.add_argument('--output_model', type=str, default='model_state_dict.pth', help='Path to save the trained model.')
-        args = parser.parse_args()
-        # Call the run_train function with the provided arguments
-        run_train(
-                data_train=args.data_train,
-                data_val=args.data_val,
-                vocab_file=args.vocab_file,
-                spe_file = args.spe_file,
-                max_len=args.max_len,
-                batch_size=args.batch_size,
-                mask_prob=args.mask_prob,
-                epochs=args.epochs,
-                d_model=args.d_model,
-                n_layers=args.n_layers,
-                heads=args.heads,
-                dropout=args.dropout,
-                device=args.device,
-                output_model=args.output_model
-                )
